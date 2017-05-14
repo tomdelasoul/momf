@@ -6,7 +6,7 @@ import java.util.Map;
 /**
  * test various buy/sell strategies on historic series of stock price data
  * 
- * @author Kolarik
+ * @author tomdelasoul
  */
 public class Strategy {	
 	enum TrxType {
