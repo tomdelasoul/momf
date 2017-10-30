@@ -76,7 +76,8 @@ public class StrategyMomentumFollowerTwo extends Strategy implements StrategyInt
 					feesTotal += feesDeal;
 					trx = TrxStatus.STOCK_BOUGHT;
 					Strategy.info(price, verbose, "B", gradCtr, delta, 0f, feesDeal, priceBuy*numStocks);
-					this.addMarkToChart(plot, "B", price.getDate(), price.getMin());
+					if(null != plot)
+						this.addMarkToChart(plot, "B", price.getDate(), price.getMin());
 				}
 				// stop loss
 				if(		 TrxStatus.STOCK_BOUGHT  == trx && 
@@ -91,7 +92,8 @@ public class StrategyMomentumFollowerTwo extends Strategy implements StrategyInt
 					numSellTrx++;
 					trx = TrxStatus.STOCK_SOLD;
 					Strategy.info(price, verbose, "L", gradCtr, delta, profitDeal, feesDeal, price.getTrxPrice()*numStocks);
-					this.addMarkToChart(plot, "L", price.getDate(), price.getMin());
+					if(null != plot)
+						this.addMarkToChart(plot, "L", price.getDate(), price.getMin());
 				}
 				// sell
 				if(		TrxStatus.STOCK_BOUGHT == trx &&
@@ -106,7 +108,8 @@ public class StrategyMomentumFollowerTwo extends Strategy implements StrategyInt
 					numSellTrx++;
 					trx = TrxStatus.STOCK_SOLD;
 					Strategy.info(price, verbose, "S", gradCtr, delta, profitDeal, feesDeal, price.getTrxPrice()*numStocks);
-					this.addMarkToChart(plot, "S", price.getDate(), price.getMin());
+					if(null != plot)
+						this.addMarkToChart(plot, "S", price.getDate(), price.getMin());
 				}
 			}
 		}
