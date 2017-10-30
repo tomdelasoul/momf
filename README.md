@@ -1,2 +1,0 @@
-# momf
-momentum follower

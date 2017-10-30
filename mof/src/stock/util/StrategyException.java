@@ -1,4 +1,4 @@
-package stock;
+package stock.util;
 
 public class StrategyException extends Exception  {
 	private static final long serialVersionUID = -373972810056568026L;
