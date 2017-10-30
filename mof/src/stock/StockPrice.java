@@ -1,7 +1,7 @@
 package stock;
 
+import java.text.SimpleDateFormat;
 import java.util.Date;
-
 /**
  * a class that describes a stock price at a given date
  */
@@ -14,13 +14,17 @@ public class StockPrice {
 	private Float min;
 	// the maximum price
 	private Float max;
-	// date of the price
+	// date of the price as string
 	private String dateString;
-	// 
+	// date of the price as date
 	private Date date;
+	// volume of trades
+	private long volume;
+	// format for print-outs
+	private static SimpleDateFormat sdf = new SimpleDateFormat("dd.MM.yy");
 	
 	public String toString() {
-		return dateString+ " o: "+open.toString() + " h: "+max.toString()+" l:"+min.toString()+" c: "+close.toString();
+		return this.getDateAsString()+ " o: "+open.toString() + " h: "+max.toString()+" l:"+min.toString()+" c: "+close.toString();
 	}
 	
 	public StockPrice() {
@@ -28,6 +32,7 @@ public class StockPrice {
 		this.close = 0f;
 		this.min = 0f;
 		this.max = 0f;
+		
 	}
 	
 	/**
@@ -38,35 +43,50 @@ public class StockPrice {
 		return (this.max+this.min)/2;
 	}
 	
-	private float getClose() {
+	public float getClose() {
 		return close;
 	}
 	public void setClose(float close) {
 		this.close = close;
 	}
-	private float getOpen() {
+	public float getOpen() {
 		return open;
 	}
 	public void setOpen(float open) {
 		this.open = open;
 	}
-	private float getMin() {
+	public float getMin() {
 		return min;
 	}
 	public void setMin(float min) {
 		this.min = min;
 	}
-	private float getMax() {
+	public float getMax() {
 		return max;
 	}
 	public void setMax(float max) {
 		this.max = max;
 	}
-	public String getDate() {
-		return dateString;
+	public String getDateAsString() {
+		return StockPrice.sdf.format(this.date);
 	}
-	// string is of the form YY.MM.DD
-	public void setDate(String string) {
-		this.dateString = string;
+
+	public void setDate(Date date) {
+		this.date = date;
+	}
+	/**
+	 * returns date of price
+	 * @return
+	 */
+	public Date getDate() {
+		return this.date;
+	}
+
+	public void setVolume(long l) {
+		this.volume = l;
+	}
+	
+	public long getVolume() {
+		return this.volume;
 	}
 }

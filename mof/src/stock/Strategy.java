@@ -1,193 +1,71 @@
 package stock;
 
-import java.io.FileNotFoundException;
-import java.util.Map;
+import java.awt.Color;
+import java.util.Date;
+
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.annotations.XYPointerAnnotation;
+import org.jfree.chart.labels.StandardXYToolTipGenerator;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.ui.TextAnchor;
 
 /**
- * test various buy/sell strategies on historic series of stock price data
- * 
- * @author tomdelasoul
+ * parent class for trading strategies - instantiate for individual strategies
+ *
  */
-public class Strategy {	
-	enum TrxType {
-		BOUGHT, // invested
-		SOLD, // not invested
-	};
-	
+public class Strategy {
+	/**
+	 * period in days that we look back to calculate buyGrad 
+	 */
+	public Integer buyGradDays;
+	/**
+	 * change in per-mill (1/1000) between stock price byGrad days before and today.
+	 * 
+	 * if a cumulated growth of buyDelta promille after BuyGrad days is achieved, we buy. e.g. 20 = 2%
+	 */
+	public Integer buyDeltaMille;
+	/**
+	 * period in days that we look back to calculate sellGrad 
+	 */
+	public Integer sellGradDays;
+	/**
+	 * Delta in per-mill (1/1000) between the stock price after sellGrad days.
+	 * 
+	 * if a cumulated growth of sellDelta promille after sellGrad days is achieved, we sell. e.g. 20 = 2%
+	 */
+	public Integer sellDeltaMille;
+	/**
+	 * Difference between the current stock price and the last buy, in negative percent
+	 * 
+	 * A negative percentage of last buy. if lower, we sell. eg. -0.05
+	 */
+	public Float stopLossPercent; 
+	/**
+	 * Difference between the current stock price and our last buy, in positive percent
+	 * 
+	 * a positive percentage of last buy. if higher, we sell. eg. 0.05
+	 */
+	public Float sellLimitPercent;
 	
 	public Strategy() {
-		super();
-		try {
-			this.momentumFollowerEnumerator();
-		} catch (FileNotFoundException | StrategyException e) {
-			e.printStackTrace();
-		}
+			this.buyDeltaMille = null;
+			this.buyGradDays = null;
+			this.sellDeltaMille = null;
+			this.sellGradDays = null;
+			this.stopLossPercent = null;
+			this.sellLimitPercent = null;
 	}
 	
 	/**
-	 * find the best parameters for the momentumFollower strategy by enumerating parameters.
+	 * default fee logic for all strategies
+	 * calculate fees for a transaction
 	 * 
-	 * @throws StrategyException
-	 * @throws FileNotFoundException
-	 */
-	public void momentumFollowerEnumerator() throws StrategyException, FileNotFoundException {
-		// String historicPrices = "xetra_gold2012.csv";
-		// String historicPrices = "deutsche_telekom2012.csv";
-		// String historicPrices = "deutsche_bank2012.csv";
-		String historicPrices = "Volkswagen_vz2012.csv";
-		// String historicPrices = "testData.csv";
-		
-		StockPriceSeries series = new StockPriceSeries(); 
-		series.loadSeriesFromCsvFile(historicPrices);
-
-		Float profitMax = 0f; // remember the maximum profit
-		int widthOfDays = 15; // maximum number of days we wait to buy and wait to sell
-		
-		for(Float stopLoss = -0.04f; stopLoss >= -0.15f; stopLoss-=0.01f) { // stop-loss in percentage
-			for(int buyDelta = 20; buyDelta <= 40; buyDelta++) { // momentum to be achieved when we buy
-				for(int sellDeltaAdd = 10; sellDeltaAdd <= 40; sellDeltaAdd++) { // additional momentum to be achieved to sell
-					// System.out.println("bd "+buyDelta);
-					for(int buyGrad = 1; buyGrad <= widthOfDays; buyGrad++) { // days we look back for momentum to buy
-						// System.out.print("B "+buyGrad+": ");
-						for(int sellGrad = buyGrad+1; sellGrad <= buyGrad+widthOfDays; sellGrad++) { // days we look back for momentum to sell
-							Float profit = Strategy.momentumFollower(series, false, buyGrad, buyDelta, sellGrad, buyDelta+sellDeltaAdd, stopLoss);
-							if(profit > profitMax) {
-								System.out.println(String.format("Max: %d %d %d %d %.2f %4.0f", buyGrad, buyDelta, sellGrad, buyDelta+sellDeltaAdd, stopLoss, profit));
-								profitMax = profit;
-							}
-							// System.out.print(String.format("%4.0f", profit));				
-						}
-						// System.out.println();
-					}
-				}
-			}
-		}
-		System.out.println("---");
-		// this.momentumFollower(series, true, 8, 24, 14, 34, -0.05f);
-	}
-
-	
-
-	/**
-	 * a strategy that buys after a certain start momentum, and sells after a certain end momentum
-	 * 
-	 * @param series
-	 * @return profit in EUR
-	 * @throws Exception 
-	 */
-	public static Float momentumFollower (
-			StockPriceSeries series, 
-			boolean verbose, // yes = verbose, no = not
-			int buyGrad, // after how many days have we reached. e.g. 5
-			int buyDelta, // a cumulated growth of buyDelta promille, so we buy. e.g. 20 = 2%
-			int sellGrad, // after how many days after a buy have we reached. e.g. 7
-			int sellDelta, // a cumulated growth of seelDelta promille, so we sell. eg.g 30 = 3%
-			Float stopLossPercent // a negative percentage of last buy. if higher, we sell. eg. -0.05
-			) throws StrategyException {
-
-		TrxType trx = TrxType.SOLD; // we start empty
-		Integer numStocks = 100; // how many stocks do we buy 
-		Float priceBuy = 0f; // the last price at which we bought
-		Float profitDeal = 0f; // profit per deal
-		Float profitTotal = 0f; // total profit
-		Float feesDeal = 0f; // fee per deal
-		Float feesTotal = 0f; // total fees we have to pay
-		Integer numBuyTrx = 0; // number of buy transactions
-		Integer numSellTrx = 0; // number of buy transactions
-		Float priceBuySum = 0f; // sum of all prices where we bought
-
-		int maxLookBackInDays = buyGrad + sellGrad; // how many days do we look back to calculate momentum?
-
-		if(sellGrad <= buyGrad) {
-			throw new StrategyException("sellGrad ("+sellGrad+") is equal or below buyGrad ("+buyGrad+")");
-		}
-		if(stopLossPercent > 0) {
-			throw new StrategyException("stopLossPercent need to be negative, but it is "+stopLossPercent);
-		}
-
-		for (Map.Entry<Integer, StockPrice> entry : series.getSeries().entrySet()) {
-			StockPrice price = entry.getValue();
-			Integer key = entry.getKey();
-			if(verbose) System.out.print(price.getDate()+" "+String.format("%.2f", price.getTrxPrice()));
-			// now calculate delta closing prices to the previous closes
-			for(Integer gradCtr = 1; gradCtr<=maxLookBackInDays; gradCtr++) {
-				Float priceInPast = 0f;
-				if(key >= gradCtr) {
-					priceInPast = series.getSeries().get(key-gradCtr).getTrxPrice();
-					Float delta = 1000f*((price.getTrxPrice()-priceInPast)/priceInPast);
-					// buy
-					if(		TrxType.SOLD == trx &&
-							gradCtr == buyGrad && 
-							delta >= buyDelta
-							) {
-						if(verbose) Strategy.printTrx("B", gradCtr, delta);
-						priceBuy = price.getTrxPrice();
-						priceBuySum += priceBuy;
-						numBuyTrx++;
-						feesTotal += Strategy.fees(priceBuy, numStocks);
-						trx = TrxType.BOUGHT;
-						
-					}
-					// stop loss
-					if(		 TrxType.BOUGHT  == trx && 
-							(price.getTrxPrice() - priceBuy)/(priceBuy) < stopLossPercent
-							) {
-						profitDeal = (price.getTrxPrice()-priceBuy)*numStocks;
-						profitTotal += profitDeal;
-						feesDeal =  Strategy.fees(priceBuy, numStocks);
-						feesTotal += feesDeal;
-						numSellTrx++;
-						trx = TrxType.SOLD;
-						if(verbose) {
-							Strategy.printTrx("L", gradCtr, delta);
-							Strategy.printTrxProfit(profitDeal, feesDeal, priceBuy*numStocks);
-						}
-					}
-					// sell
-					if(		TrxType.BOUGHT == trx &&
-							gradCtr == sellGrad &&
-							delta >= sellDelta &&
-							(price.getTrxPrice() > priceBuy)
-							) {
-						profitDeal = (price.getTrxPrice()-priceBuy)*numStocks;
-						profitTotal += profitDeal;
-						feesDeal =  Strategy.fees(priceBuy, numStocks);
-						feesTotal += feesDeal;
-						numSellTrx++;
-						trx = TrxType.SOLD;
-						if(verbose) {
-							Strategy.printTrx("S", gradCtr, delta);
-							Strategy.printTrxProfit(profitDeal, feesDeal, priceBuy*numStocks);
-						}
-					}
-				}					
-			}
-			if(verbose) System.out.println();
-		}
-		Float averagePriceBought = priceBuySum/numBuyTrx;
-		Float profitPercent = 100*profitTotal/(priceBuySum/numBuyTrx)/numStocks;
-		if(verbose) {
-			System.out.println(
-					"avg p: "+String.format("%.2f", averagePriceBought) +
-					" profit: "+String.format("%.2f", profitTotal)+" "+
-					" fees: "+String.format("%.2f", feesTotal)+" "+
-					" "+
-					String.format("%.0f%%", profitPercent)+
-					" "+
-					numBuyTrx+"-"+numSellTrx+
-					" "+
-					trx);
-		}
-		return profitTotal-feesTotal;
-	}
-
-	/**
-	 * calculate fees for transaction
 	 * @param priceBuy at which price did we buy
 	 * @param numStocks number of stocks bought
 	 * @return fees in EUR
 	 */
-	private static Float fees(Float priceBuy, Integer numStocks) {
+	public static Float fees(Float priceBuy, Integer numStocks) {
 		Float volume = priceBuy * numStocks;
 		// own fees: 
 		// fix EUR 7,95 +
@@ -210,39 +88,16 @@ public class Strategy {
 		return ownFees+remoteFees;
 	}
 	
-	private void dumpHistoricPrices(StockPriceSeries series) {
-		for (Map.Entry<Integer, StockPrice> entry : series.getSeries().entrySet()) {
-			StockPrice price = entry.getValue();
-			System.out.print("k: "+entry.getKey());
-			System.out.print(" "+price);
-			System.out.println();
-		}
-	}
-
+	
 	/**
-	 * calculate momentum
+	 * pretty printer for deal details
 	 */
-	private void statistics(StockPriceSeries series) {
-		for (Map.Entry<Integer, StockPrice> entry : series.getSeries().entrySet()) {
-			StockPrice price = entry.getValue();
-			Integer key = entry.getKey();
-			System.out.print(key+";"+price.getDate()+";"+price.getTrxPrice()+";");
-			// now calculate delta closing prices to the previous closing prices
-			Integer maxLookBackInDays = 7;
-			Float sumDelta = 0f; // for average calc
-			for(Integer gradCtr = 1; gradCtr<=maxLookBackInDays; gradCtr++) {
-				if(key >= maxLookBackInDays) {
-					Float priceCloseInPast = series.getSeries().get(key-gradCtr).getTrxPrice();
-					Float delta = 1000*(price.getTrxPrice()-priceCloseInPast)/price.getTrxPrice();
-					sumDelta += delta;
-				}
-			}
-			System.out.print(Math.round(sumDelta/maxLookBackInDays));
-			System.out.println();
+	public static void info(StockPrice price, boolean verbose, String trx, Integer gradCtr, Float delta, Float profitDeal,
+			Float feesDeal, float VolumeDeal) {
+		if(!verbose) {
+			return;
 		}
-	}
-
-	private static void printTrx(String trx, Integer gradCtr, Float delta) {
+		System.out.print(price.getDateAsString()+" "+String.format("%.2f", price.getTrxPrice()));
 		System.out.print(
 				" "+
 						trx+
@@ -252,19 +107,45 @@ public class Strategy {
 						String.format("%3.0f", delta)+
 						"]"
 				);
+		switch(trx) {
+		case "B":
+			// break;
+		case "S":
+		case "L":
+			System.out.print(
+					" € "+
+							String.format("%.02f", profitDeal) +
+							"-"+
+							String.format("%.02f", feesDeal) +
+							"("+
+							String.format("%3d", Math.round(100*profitDeal/VolumeDeal))
+							+"%)"
+					);
+			break;
+		default:
+			System.err.printf("unknown trx type %s", trx);
+			break;
+		}
+		System.out.println();
 	}
 
-	private static void printTrxProfit(Float profit, Float fees, Float volume) {
-		System.out.print(
-				" € "+
-						String.format("%.02f",profit) +
-						"-"+
-						String.format("%.02f", fees) +
-						"("+
-						String.format("%3d", Math.round(100*profit/volume))
-						+"%)"
-				);
-	}
+	/**
+	 * add an annotation to a chart for a given Date
+	 * 
+	 * @param chart
+	 */
+	public void addMarkToChart(XYPlot plot, String text, Date date, Float price) {
+        
+		XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer(true, true);
+        renderer.setSeriesPaint(0, Color.black);
+        renderer.setBaseToolTipGenerator(StandardXYToolTipGenerator.getTimeSeriesInstance());
+        
+        XYPointerAnnotation annotation = new XYPointerAnnotation(text, date.getTime(), price, Math.PI / 2.0);
+        annotation.setTextAnchor(TextAnchor.TOP_CENTER);
+        
+        renderer.addAnnotation(annotation);
+        plot.setRenderer(1, renderer);
 
+	}
 
 }
